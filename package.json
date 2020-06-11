@@ -1,0 +1,23 @@
+{
+  "name": "chat",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node ./bin/www"
+  },
+  "dependencies": {
+    "axios": "^0.19.2",
+    "connect-multiparty": "^2.2.0",
+    "cookie-parser": "~1.4.4",
+    "dayjs": "^1.8.23",
+    "debug": "~2.6.9",
+    "express": "~4.16.1",
+    "morgan": "~1.9.1",
+    "node-uuid": "^1.4.8",
+    "redis": "^3.0.2",
+    "socket.io": "^2.3.0",
+    "vue": "^2.6.11",
+    "websocket": "^1.0.31",
+    "ws": "^7.2.3"
+  }
+}

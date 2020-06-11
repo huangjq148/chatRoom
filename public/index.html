@@ -1,0 +1,301 @@
+<html>
+
+<head>
+    <title>Express</title>
+    <link rel="stylesheet" href="/stylesheets/style.css">
+    <script src="./javascripts/vue.js"></script>
+    <script src="./javascripts/axios.min.js"></script>
+</head>
+
+<body>
+    <div id="app" class="container" @click="hideContextmenu">
+        <div class="shadow" v-show="isShowModel">
+            <div class="model-wrap">
+                <input type="text" v-model="inputContent" @keypress.enter="hideModel" :placeholder="tips">
+            </div>
+        </div>
+        <div class="header">
+            聊天室【{{roomName}}】，共有【{{totalUser}}】人
+        </div>
+        <div class="content" id="content">
+            <div class="chat-wrap" v-for="item in chatList" @touchstart="gotouchstart(item, $event)"
+                @touchmove="gotouchmove" @touchend="gotouchend">
+
+                <template v-if="item.type==='systemInfo'">
+                    <div class="sys-info-wrap">
+                        <div class="sys-info">
+                            {{item.content}}
+                        </div>
+                    </div>
+                </template>
+                <template v-else>
+                    <div :class="{'chat-content':true, 'fr':item.username === username}">
+                        <div :class="{ username:true, 'is-me':item.username === username}">
+                            {{item.username}}&nbsp;{{item.sendTime}}
+                        </div>
+                        <!--文本内容-->
+                        <div style="padding-top:20px;" v-if="item.msgType==='text'" :class="{
+                        'join-room':item.type==='systemInfo'}">{{item.content}}
+                        </div>
+                        <!--图片消息-->
+                        <div v-if="item.msgType==='image'" style="padding-top:20px;">
+                            <img :src="item.content" alt="图片被删除"
+                                style="min-width: 200px; max-width: 100%;max-height: 60vw;">
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+        <div class="input-wrap">
+            <div class="tools-wrap">
+                <div v-for="item in tools" class="tool" @click="item.onclick">{{item.name}}</div>
+            </div>
+            <input type="text" placeholder="请输入聊天内容，按回车键发送" v-model="message.content" @keypress.enter="sendMsg">
+        </div>
+
+        <input type="file" value="选择图片" ref="upload-btn" @change="handleUpload" :files="files" style="display: none;">
+        <div class="context-menu" ref="contextMenu">
+            <ul>
+                <li @click="revertMsg">
+                    撤销
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+
+        window.onresize = function () {
+            handleContentScrollBottom()
+        }
+
+        //将滚动条滚动到底部
+        function handleContentScrollBottom(delay) {
+            let $$div = window.document.getElementById("content");
+            setTimeout(function () {
+                $$div.scrollTo(0, $$div.scrollHeight)
+            }, delay)
+        }
+
+        let app = new Vue({
+            el: "#app",
+            data() {
+                return {
+                    //websocket服务地址
+                    serverUrl: "ws://192.168.100.7:80",
+                    //聊天室用户数量
+                    totalUser: 0,
+                    //websocket句柄
+                    ws: null,
+                    //提问框文本内容
+                    inputContent: "",
+                    //提示框提示文本
+                    tips: "请输入聊天室名称",
+                    //当前用户名
+                    username: "",
+                    //房间名
+                    roomName: "",
+                    //是否显示提问框
+                    isShowModel: true,
+                    //消息内容
+                    message: {
+                        content: ""
+                    },
+                    //工具栏
+                    tools: [],
+                    //聊天记录
+                    chatList: [],
+                    //上传的文件
+                    files: {},
+                    //用于计算是否长按
+                    touchHandle: 0,
+                    //当前选中的文本
+                    currentMsg: null,
+                    //消息类型
+                    messageType: {
+                        TEXT: "text",
+                        IMG: "image"
+                    }
+                }
+            },
+            methods: {
+                /**
+                 * 撤销消息
+                 */
+                revertMsg(e) {
+                    const _this = this;
+                    _this.hideContextmenu();
+                    e.perventDefault;
+                    e.stopPropagation();
+                    _this.ws.send(JSON.stringify({
+                        type: "revertMsg",
+                        roomName: _this.roomName,
+                        username: _this.username,
+                        msgId: _this.currentMsg.id
+                    }))
+                },
+
+                /**
+                 * 隐藏上下文菜单
+                 */
+                hideContextmenu() {
+                    this.$refs.contextMenu.style.display = "none"
+                },
+
+                //移动端开始触屏事件
+                gotouchstart(item, e) {
+                    const $dom = this.$refs.contextMenu;
+                    const _this = this;
+                    const isMine = item.username === _this.username;
+                    clearTimeout(this.touchHandle);//清除定时器
+                    this.touchHandle = 0;
+                    this.touchHandle = setTimeout(function () {
+                        //执行长按要执行的内容，
+                        console.log("长按响应事件", e);
+                        if (isMine) {
+                            let { pageY, pageX } = e.touches[0];
+                            let { clientHeight, clientWidth } = document.body
+                            if (pageY > clientHeight / 2) {
+                                pageY = parseInt(pageY) - 81;
+                            }
+                            if (pageX > clientWidth / 2) {
+                                pageX -= clientWidth * 0.3;
+                            }
+                            $dom.style.top = pageY;
+                            $dom.style.left = pageX;
+                            $dom.style.display = "block";
+                            _this.currentMsg = item;
+                        }
+                        e.perventDefault;
+                        e.stopPropagation();
+                    }, 600);//这里设置定时
+                },
+
+                //手释放，如果在500毫秒内就释放，则取消长按事件，此时可以执行onclick应该执行的事件
+                gotouchend(e) {
+                    clearTimeout(this.touchHandle);
+                    if (this.touchHandle != 0) {
+                        //这里写要执行的内容（尤如onclick事件）
+                        e.perventDefault;
+                        e.stopPropagation();
+                    }
+                },
+
+                //如果手指有移动，则取消所有事件，此时说明用户只是要移动而不是长按 
+                gotouchmove() {
+                    clearTimeout(this.touchHandle);//清除定时器
+                    this.touchHandle = 0;
+                },
+
+                handleToolClick() {
+                    // alert(1)
+                    console.log("工具栏事件")
+                },
+
+                //隐藏弹出框
+                hideModel() {
+                    let _this = this;
+                    if (!_this.roomName) {
+                        _this.roomName = _this.inputContent;
+                        _this.tips = "请输入昵称";
+                        _this.inputContent = "";
+                    } else {
+                        _this.username = _this.inputContent;
+                        window.sessionStorage.setItem("username", _this.username)
+                    }
+                    if (_this.roomName && _this.username) {
+                        _this.isShowModel = false;
+                        _this.ws = new WebSocket(this.serverUrl);
+                        _this.ws.onopen = _this.onChatRoomOpen;
+                    }
+                },
+
+                //加入聊天室
+                onChatRoomOpen() {
+                    let _this = this;
+                    _this.ws.send(JSON.stringify({
+                        type: "joinRoom",
+                        roomName: _this.roomName,
+                        username: _this.username
+                    }))
+                    _this.ws.onmessage = _this.onReceiveMsg;
+                },
+
+                //接收消息响应事件
+                onReceiveMsg(evt) {
+                    const _this = this;
+                    let received_msg = evt.data;
+                    let msgObj = JSON.parse(received_msg)
+                    if (msgObj.type === "systemInfo" && msgObj.action === "revertMsg") {
+                        //撤回消息
+                        const msgId = msgObj.otherInfo.split("---")[0];
+                        const username = msgObj.otherInfo.split("---")[1];
+                        if (username === _this.username) {
+                            msgObj.content = "你撤回了一条消息"
+                        }
+                        _this.chatList = _this.chatList.filter(item => item.id !== msgId)
+                    } else if (msgObj.type === "systemInfo") {
+
+                    }
+                    if (msgObj.totalUser) {
+                        _this.totalUser = msgObj.totalUser
+                    }
+                    _this.chatList.push(msgObj)
+                    _this.$nextTick(() => {
+                        let delay = 0
+                        if (msgObj.msgType == "image") {
+                            delay = 500
+                        }
+                        handleContentScrollBottom(delay);
+                    })
+                },
+
+                //发送消息
+                sendMsg() {
+                    if (this.message.content !== "") {
+                        this.ws.send(JSON.stringify({
+                            type: "sendMsg",
+                            msgType: this.messageType.TEXT,
+                            content: this.message.content
+                        }))
+                        this.message.content = ""
+                    }
+                },
+
+                //点击上传按钮
+                handleUploadClick() {
+                    this.$refs["upload-btn"].click();
+                },
+
+                //上传图片
+                handleUpload(e) {
+                    const _this = this;
+                    let formData = new FormData();
+                    formData.append('multipartFiles', e.target.files[0], e.target.files[0].name);
+                    _this.$nextTick(() => {
+                        axios.post('/files/upload', formData, {
+                            headers: { 'Content-Type': 'multipart/form-data' }
+                        }).then(res => {
+                            _this.ws.send(JSON.stringify({
+                                type: "sendMsg",
+                                msgType: this.messageType.IMG,
+                                content: res.data.filePath
+                            }))
+                        });
+                    })
+                }
+            },
+            created() {
+                if (window.sessionStorage.getItem("username")) {
+                    this.username = window.sessionStorage.getItem("username")
+                }
+                this.tools.push({ name: "表情", onclick: this.handleUploadClick })
+                this.tools.push({ name: "2", onclick: this.handleToolClick })
+            }
+        })
+
+
+    </script>
+</body>
+
+</html>
