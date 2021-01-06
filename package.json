@@ -6,7 +6,7 @@
     "start": "node ./bin/www"
   },
   "dependencies": {
-    "axios": "^0.19.2",
+    "axios": "^0.21.1",
     "connect-multiparty": "^2.2.0",
     "cookie-parser": "~1.4.4",
     "dayjs": "^1.8.23",
